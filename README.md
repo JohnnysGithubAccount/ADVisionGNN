@@ -30,7 +30,7 @@ Although still under development, this framework aims to improve anomaly detecti
 
 <div align="center">
   <img src="https://github.com/user-attachments/assets/1a5c0ae4-5ad8-4f6c-8e43-144dd4e4fc7d" 
-    alt="Training Process" width="500"/>
+    alt="Training Process" width="700"/>
 </div>
 
 ## Inferring Process  
@@ -40,7 +40,7 @@ Although still under development, this framework aims to improve anomaly detecti
 
 <div align="center">
   <img src="https://github.com/user-attachments/assets/f90850bc-8893-433a-8ef6-2bd01049b978" 
-alt="Inferring Process" width="500"/>
+alt="Inferring Process" width="700"/>
 </div>
 
 ---
@@ -58,7 +58,7 @@ alt="Inferring Process" width="500"/>
 
 <div align="center">
     <img src="https://github.com/user-attachments/assets/98f5657d-8a2c-4279-8307-2ca9de2c5137" 
-    alt="Dataset Overview" width="500"/>
+    alt="Dataset Overview" width="700"/>
 </div>
 
 - Future tests will include datasets such as **MVTec LOCO AD** and **BeanTech AD**.
@@ -70,7 +70,7 @@ alt="Inferring Process" width="500"/>
 
 <div align="center">
     <img src="https://github.com/user-attachments/assets/6747c6d8-995b-4a8e-b12d-cd59ac2956fc" 
-    alt="Results" width="500"/>
+    alt="Results" width="700"/>
 </div>
 
 ---
