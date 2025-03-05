@@ -9,7 +9,7 @@ from timm.models.helpers import load_pretrained
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 from timm.models.registry import register_model
 
-from GVAE.gcn_lib import Grapher, act_layer
+from GVAE.ADVisionGNN.gcn_lib import Grapher, act_layer
 
 
 class FFN(nn.Module):

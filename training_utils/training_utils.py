@@ -7,7 +7,7 @@ from torchmetrics.functional import accuracy
 from tqdm import tqdm
 import gc
 
-from GVAE.utils.utils import instance_auroc, full_pixel_auroc
+from GVAE.ADVisionGNN.utils.utils import instance_auroc, full_pixel_auroc
 
 
 def train(

@@ -1,4 +1,4 @@
-from GVAE.data.constant import *
+from GVAE.ADVisionGNN.data.constant import *
 from typing import Dict
 import torch
 

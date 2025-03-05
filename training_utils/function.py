@@ -1,9 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchmetrics import StructuralSimilarityIndexMeasure
+
 from skimage.metrics import structural_similarity as ssim
 import numpy as np
-from torchmetrics import StructuralSimilarityIndexMeasure
 
 
 class SSIMLoss(nn.Module):

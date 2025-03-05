@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from model.model import GraphVariationalAutoencoder
 from PIL import Image
 
+
 # Load the model
 model_path = r"model/results/bottle/model.pth"
 model = GraphVariationalAutoencoder()

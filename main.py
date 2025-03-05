@@ -14,7 +14,7 @@ from torchvision.transforms import Resize
 from torchvision.transforms import Normalize
 from tqdm import tqdm
 
-from GVAE.utils.utils import visualize_encoder_features
+from GVAE.ADVisionGNN.utils.utils import visualize_encoder_features
 from utils.utils import ignore_warnings
 from utils.utils import get_performance_plots
 from utils.utils import set_up_pytorch
