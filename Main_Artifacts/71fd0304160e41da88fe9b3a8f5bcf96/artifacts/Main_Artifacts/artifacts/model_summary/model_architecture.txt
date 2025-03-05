@@ -1,0 +1,127 @@
+GraphVariationalAutoencoder(
+  (stem): Stem(
+    (convs): Sequential(
+      (0): Conv2d(3, 24, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+      (1): BatchNorm2d(24, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      (2): GELU(approximate='none')
+      (3): Conv2d(24, 48, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+      (4): BatchNorm2d(48, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      (5): GELU(approximate='none')
+      (6): Conv2d(48, 48, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+      (7): BatchNorm2d(48, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    )
+  )
+  (encoder): GraphEncoder(
+    (blocks): ModuleList(
+      (0): Downsample(
+        (conv): Sequential(
+          (0): Conv2d(48, 96, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+          (1): BatchNorm2d(96, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        )
+      )
+      (1-4): 4 x Sequential(
+        (0): Grapher(
+          (fc1): Sequential(
+            (0): Conv2d(96, 96, kernel_size=(1, 1), stride=(1, 1))
+            (1): BatchNorm2d(96, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+          (graph_conv): DyGraphConv2d(
+            (gconv): MRConv2d(
+              (nn): BasicConv(
+                (0): Conv2d(192, 192, kernel_size=(1, 1), stride=(1, 1), groups=4)
+                (1): BatchNorm2d(192, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+                (2): GELU(approximate='none')
+              )
+            )
+            (dilated_knn_graph): DenseDilatedKnnGraph(
+              (_dilated): DenseDilated()
+            )
+          )
+          (fc2): Sequential(
+            (0): Conv2d(192, 96, kernel_size=(1, 1), stride=(1, 1))
+            (1): BatchNorm2d(96, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+          (drop_path): Identity()
+        )
+        (1): FFN(
+          (fc1): Sequential(
+            (0): Conv2d(96, 384, kernel_size=(1, 1), stride=(1, 1))
+            (1): BatchNorm2d(384, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+          (act): GELU(approximate='none')
+          (fc2): Sequential(
+            (0): Conv2d(384, 96, kernel_size=(1, 1), stride=(1, 1))
+            (1): BatchNorm2d(96, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+          (drop_path): Identity()
+        )
+      )
+      (5): Downsample(
+        (conv): Sequential(
+          (0): Conv2d(96, 240, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+          (1): BatchNorm2d(240, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        )
+      )
+      (6-7): 2 x Sequential(
+        (0): Grapher(
+          (fc1): Sequential(
+            (0): Conv2d(240, 240, kernel_size=(1, 1), stride=(1, 1))
+            (1): BatchNorm2d(240, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+          (graph_conv): DyGraphConv2d(
+            (gconv): MRConv2d(
+              (nn): BasicConv(
+                (0): Conv2d(480, 480, kernel_size=(1, 1), stride=(1, 1), groups=4)
+                (1): BatchNorm2d(480, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+                (2): GELU(approximate='none')
+              )
+            )
+            (dilated_knn_graph): DenseDilatedKnnGraph(
+              (_dilated): DenseDilated()
+            )
+          )
+          (fc2): Sequential(
+            (0): Conv2d(480, 240, kernel_size=(1, 1), stride=(1, 1))
+            (1): BatchNorm2d(240, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+          (drop_path): Identity()
+        )
+        (1): FFN(
+          (fc1): Sequential(
+            (0): Conv2d(240, 960, kernel_size=(1, 1), stride=(1, 1))
+            (1): BatchNorm2d(960, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+          (act): GELU(approximate='none')
+          (fc2): Sequential(
+            (0): Conv2d(960, 240, kernel_size=(1, 1), stride=(1, 1))
+            (1): BatchNorm2d(240, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+          (drop_path): Identity()
+        )
+      )
+    )
+  )
+  (decoder): CNNDecoder(
+    (conv_layers): ModuleList(
+      (0): Sequential(
+        (0): ConvTranspose2d(240, 96, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
+        (1): BatchNorm2d(96, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (2): ReLU()
+      )
+      (1): Sequential(
+        (0): ConvTranspose2d(96, 48, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
+        (1): BatchNorm2d(48, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (2): ReLU()
+      )
+      (2): Sequential(
+        (0): ConvTranspose2d(48, 24, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
+        (1): BatchNorm2d(24, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (2): ReLU()
+      )
+    )
+    (output_layer): Sequential(
+      (0): ConvTranspose2d(24, 3, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
+      (1): Tanh()
+    )
+  )
+)

@@ -1,0 +1,27 @@
+artifact_path: Main_Artifacts/modelGraphVariationalAutoencoder
+flavors:
+  python_function:
+    config:
+      device: null
+    data: data
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.pytorch
+    pickle_module_name: mlflow.pytorch.pickle_module
+    python_version: 3.10.16
+  pytorch:
+    code: null
+    model_data: data
+    pytorch_version: 2.6.0+cu118
+mlflow_version: 2.17.2
+model_size_bytes: 11150162
+model_uuid: 6211a314f60d4492b6e61b3b4f13bd0f
+run_id: 825c351cdcee4fad9bdf288a5707821b
+signature:
+  inputs: '[{"type": "tensor", "tensor-spec": {"dtype": "float32", "shape": [-1, 3,
+    224, 224]}}]'
+  outputs: '[{"type": "tensor", "tensor-spec": {"dtype": "float32", "shape": [-1,
+    3, 224, 224]}}]'
+  params: null
+utc_time_created: '2025-03-04 10:50:54.050951'
