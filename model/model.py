@@ -1,5 +1,8 @@
 import math
+
+import faiss
 import torch
+import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Sequential as Seq
@@ -10,6 +13,7 @@ from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 from timm.models.registry import register_model
 
 from GVAE.ADVisionGNN.gcn_lib import Grapher, act_layer
+from GVAE.utils import
 
 
 class FFN(nn.Module):
@@ -264,8 +268,16 @@ class GraphDecoder(nn.Module):
 
 class GraphVariationalAutoencoder(nn.Module):
     def __init__(self,
-                 decoder:str = 'graph'):
+                 decoder:str = 'cnn',
+                 mode: str = "train"):
+        """
+
+        :param decoder: cnn or graph
+        :param mode: train or test mode
+        """
         super(GraphVariationalAutoencoder, self).__init__()
+
+        self.memory_bank = list()
 
         blocks = [2, 2, 6, 2]
         blocks = [2, 4, 2]
@@ -298,13 +310,6 @@ class GraphVariationalAutoencoder(nn.Module):
             dpr=dpr
         )
 
-        # self.decoder = CNNDecoder(
-        #     hidden_channels=[384, 240, 96, 48, 24],
-        #     kernel_sizes=[4, 4, 4, 4, 4],
-        #     list_strides=[2, 2, 2, 2, 2],
-        #     paddings=[1, 1, 1, 1, 1]
-        # )
-
         if decoder == "cnn":
             self.decoder = CNNDecoder(
                 hidden_channels=[384, 240, 96, 48],
@@ -313,10 +318,20 @@ class GraphVariationalAutoencoder(nn.Module):
                 paddings=[1, 1, 1, 1]
             )
         else:
-            self.decoder = GraphDecoder(
-
+            self.decoder = CNNDecoder(
+                hidden_channels=[384, 240, 96, 48],
+                kernel_sizes=[4, 4, 4, 4],
+                list_strides=[2, 2, 2, 2],
+                paddings=[1, 1, 1, 1]
             )
         self.model_init()
+
+        self.features = []
+        def hook(module, inputs, outputs):
+            self.features.append(outputs)
+
+        self.model.encoder.block[4][1].fc2[1].register_forward_hook(hook)
+        self.model.encoder.block[7][1].fc2[1].register_forward_hook(hook)
 
     def model_init(self):
         for m in self.modules():
@@ -326,6 +341,9 @@ class GraphVariationalAutoencoder(nn.Module):
                 if m.bias is not None:
                     m.bias.data.zero_()
                     m.bias.requires_grad = True
+
+    def fill_memory_bank(self):
+
 
     def forward(self, inputs):
         x = self.stem(inputs) + self.pos_embed
@@ -337,6 +355,42 @@ class GraphVariationalAutoencoder(nn.Module):
         return x
 
 
+class PatchExtractor(torch.nn.Module):
+    def __init__(self):
+        super(PatchExtractor, self).__init__()
+
+    def forward(self, feature_maps):
+        # Validate the shape of the input feature maps
+        if feature_maps.shape != (1, 240, 14, 14):
+            raise ValueError("Input feature maps must have shape (1, 240, 14, 14)")
+
+        # Create patches of shape (240, 3, 3)
+        patches = []
+        for i in range(0, 14 - 3 + 1):  # Iterate over rows
+            for j in range(0, 14 - 3 + 1):  # Iterate over columns
+                patch = feature_maps[:, :, i:i + 3, j:j + 3]  # Keep batch dimension
+                patches.append(patch)
+
+        # Convert patches to a tensor
+        patches = torch.stack(patches)  # Shape will be (number of patches, 1, 240, 3, 3)
+
+        # Reshape for FAISS, we need to flatten the patches
+        num_patches = patches.shape[0]
+        patches_flat = patches.view(num_patches, 240 * 3 * 3)  # Shape will be (num_patches, 240 * 3 * 3)
+
+        # Initialize a FAISS index
+        d = 240 * 3 * 3  # Dimension of each patch
+        index = faiss.IndexFlatL2(d)  # Using L2 distance
+
+        # Add patches to the FAISS index
+        index.add(patches_flat.detach().numpy().astype(float))
+
+        # Save the FAISS index to disk
+        faiss.write_index(index, 'feature_patches.index')
+
+        print("Patches saved to FAISS index successfully.")
+
+
 def main():
     n_blocks = sum([2, 2, 6, 2])
     channels = [48, 96, 240, 384]
@@ -345,27 +399,15 @@ def main():
     stem = Stem(out_dim=channels[0], act=act)
 
     encoder = GraphEncoder(
-        num_block=[2, 2, 6, 2],
-        hidden_channels=[48, 96, 240, 384],
-        reduce_ratios=[4, 2, 1, 1],
+        num_block=[2, 2, 2],
+        hidden_channels=[48, 96, 240],
+        reduce_ratios=[4, 2, 1],
         dpr = [x.item() for x in torch.linspace(0, 0.0, n_blocks)]
     )
-    # decoder = CNNDecoder(
-    #     hidden_channels=[384, 240, 96, 48, 24],
-    #     kernel_sizes=[4, 4, 4, 4, 4],
-    #     list_strides=[2, 2, 2, 2, 2],
-    #     paddings=[1, 1, 1, 1, 1]
-    # )
 
-    decoder = GraphDecoder(
-        num_block=[1, 1, 1, 1, 1, 1],
-        hidden_channels=[384, 240, 96, 48, 24, 3],
-        reduce_ratios=[1, 1, 1, 1, 1, 1],
-        dpr=[x.item() for x in torch.linspace(0, 0.0, n_blocks)]
-    )
-    # model = GraphVariationalAutoencoder(
-    #
-    # )
+    # Create dummy feature maps
+    # feature_maps = torch.rand(240, 14, 14).float()
+    extractor = PatchExtractor()
 
     device = torch.device('cpu')
     print(f"Using: {device}")
@@ -375,20 +417,30 @@ def main():
 
     stem = stem.to(device)
     encoder = encoder.to(device)
-    decoder = decoder.to(device)
-    # model = model.to(device)
+    extractor.to(device)
 
+    # forward
     stem_output = stem(inputs)
-    print(stem_output.shape)
-
     encoder_output = encoder(stem_output)
     print(encoder_output.shape)
+    # extractor(encoder_output)
+    index = faiss.read_index('feature_patches.index')
+    # Check the type of index
+    print("Index type:", type(index))
 
-    decoder_output = decoder(encoder_output)
-    print(decoder_output.shape)
+    # Check the dimension of the index
+    print("Dimension of the index:", index.d)
 
-    # model_output = model(inputs)
-    # print(model_output.shape)
+    # Number of vectors stored in the index
+    print("Number of vectors in the index:", index.ntotal)
+
+    # Example of performing a search
+    # For demonstration, create a random query vector
+    query_vector = np.random.rand(1, index.d).astype(np.float32)
+    distances, indices = index.search(query_vector, k=5)  # Find the 5 nearest neighbors
+    print("Distances to nearest neighbors:", distances)
+    print("Indices of nearest neighbors:", indices)
+
 
 
 if __name__ == "__main__":

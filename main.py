@@ -130,7 +130,7 @@ def main():
                     source_path=dataset_path,
                     is_train=True,
                     transform=train_image_transforms
-                )  # Replace 'class_name' with actual folder name
+                )
                 train_loader = create_loader(
                     dataset=dataset,
                     batch_size=params["batch_size"],
@@ -277,6 +277,7 @@ def main():
             "mlflow.note.content",
             "This is  an anomaly detection project"
         )
+
 
 if __name__ == "__main__":
     main()

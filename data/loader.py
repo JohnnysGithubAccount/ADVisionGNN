@@ -57,7 +57,7 @@ class MVTecDataset(Dataset):
         return 1
 
 
-    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor, int]:
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
         img = self.load_image(index)
         if self.transform:
             try:
@@ -73,7 +73,7 @@ class MVTecDataset(Dataset):
 
             label = self.get_label(index)
 
-            return img, mask, label
+            return img, mask
         else:
             return img
 
@@ -111,8 +111,8 @@ def calculate_normalization_params(data_loader, is_train: bool = False):
 
 def main():
     check_train = True
-    check_test = True
-    cal_mean_std = True
+    check_test = False
+    cal_mean_std = False
 
     main_folder_path = (r"D:\UsingSpace\HCMUTE"
                         r"\Pratical Machine Learning and Artificial Intelligence"
@@ -123,13 +123,15 @@ def main():
 
     # Augment train data
     train_transforms = transforms.Compose([
-        transforms.Resize((224, 224)),
+        transforms.Resize((256, 256)),
+        transforms.CenterCrop((224, 224)),
         transforms.ToTensor()
     ])
 
     # Create dataset object for a specific class, e.g., 'bottle'
+    idx = 0
     dataset = MVTecDataset(
-        source_path=os.path.join(main_folder_path, class_folders[1]),
+        source_path=os.path.join(main_folder_path, class_folders[idx]),
         is_train=True,
         transform=train_transforms
     )
@@ -140,7 +142,7 @@ def main():
     )
 
     test_dataset = MVTecDataset(
-        source_path=os.path.join(main_folder_path, class_folders[1]),
+        source_path=os.path.join(main_folder_path, class_folders[idx]),
         is_train=False,
         transform=train_transforms,
         mask_transform=train_transforms
