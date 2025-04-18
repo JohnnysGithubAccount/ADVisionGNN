@@ -13,7 +13,7 @@ from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 from timm.models.registry import register_model
 
 from GVAE.ADVisionGNN.gcn_lib import Grapher, act_layer
-from GVAE.utils import
+from patchcore.utils import save_to_faiss, subsampling
 
 
 class FFN(nn.Module):
@@ -269,7 +269,8 @@ class GraphDecoder(nn.Module):
 class GraphVariationalAutoencoder(nn.Module):
     def __init__(self,
                  decoder:str = 'cnn',
-                 mode: str = "train"):
+                 mode: str = "train",
+                 memory_bank_path: str = "../model/results/model/memory_bank.index"):
         """
 
         :param decoder: cnn or graph
@@ -343,7 +344,11 @@ class GraphVariationalAutoencoder(nn.Module):
                     m.bias.requires_grad = True
 
     def fill_memory_bank(self):
-
+        self.memory_bank = subsampling(self.memory_bank)
+        save_to_faiss(
+            self.memory_bank,
+            self.memory_bank_path
+        )
 
     def forward(self, inputs):
         x = self.stem(inputs) + self.pos_embed
@@ -351,6 +356,8 @@ class GraphVariationalAutoencoder(nn.Module):
 
         x = self.encoder(x)
         x = self.decoder(x)
+
+        
 
         return x
 
