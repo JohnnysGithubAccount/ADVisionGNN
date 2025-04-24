@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from typing import List, Dict, Tuple
 import cv2
 import seaborn as sns
-from sklearn.metrics import roc_auc_score, roc_curve, confusion_matrix, ConfusionMatrixDisplay, f1_score
+# from sklearn.metrics import roc_auc_score, roc_curve, confusion_matrix, ConfusionMatrixDisplay, f1_score
 
 
 def ignore_warnings() -> None:
@@ -37,7 +37,7 @@ def set_up_pytorch(seed: int = 42) -> torch.device:
 
 
 def get_image(data_loader, model, device, best_threshold, figure_size: Tuple[int, int] = (10, 10)):
-    image, mask, _ = next(iter(data_loader))
+    image, mask = next(iter(data_loader))
     print(image.shape)
     print(mask.shape)
 
@@ -46,11 +46,20 @@ def get_image(data_loader, model, device, best_threshold, figure_size: Tuple[int
         image = image.to(device)
         model = model.to(device)
 
-        reconstructed_image = model(image)
+        reconstructed_image, features_based = model(image)
+        min_val = features_based.min()
+        max_val = features_based.max()
+        features_based = (features_based - min_val) / (max_val - min_val) * 2 - 1
+
+        print(reconstructed_image.shape)
+        print(features_based.shape)
+        print("Something_landmark", (reconstructed_image + features_based).shape)
 
         # Calculate the predicted mask as the mean squared error
         # ((test_image - recon_image) ** 2).mean(axis=(1))[:, 0:-10, 0:-10].mean()
-        predicted_mask = ((image - reconstructed_image) ** 2).mean(axis=1) * 10
+        predicted_mask = ((image - reconstructed_image) ** 2).mean(axis=1).unsqueeze(dim=1) + features_based
+        print(predicted_mask.shape)
+        predicted_mask = predicted_mask.permute(0, 2, 3, 1)
 
     result = plt.figure(figsize=figure_size)
 
@@ -96,10 +105,11 @@ def get_image(data_loader, model, device, best_threshold, figure_size: Tuple[int
 
 
     plt.subplot(3, 2, 6)
-    thresholded_mask = (predicted_mask_np > thresholded).astype(float)  # Convert to binary mask
-    plt.imshow(thresholded_mask, cmap='gray')
+    # thresholded_mask = (predicted_mask_np > thresholded).astype(float)  # Convert to binary mask
+    # plt.imshow(thresholded_mask, cmap='gray')
+    plt.imshow(features_based[0].permute(1, 2, 0).cpu().numpy(), cmap='jet')
     plt.axis("off")
-    plt.title("Predicted (Threshold)")
+    plt.title("PatchCore Module Output")
 
     plt.tight_layout()
     return result
@@ -133,7 +143,7 @@ def visualize_encoder_features(test_loader, model, device):
     model.eval()  # Set the model to evaluation mode
     with torch.no_grad():  # Disable gradient calculation
         for data in test_loader:
-            images, _, _ = data  # Assuming the DataLoader returns (images, labels)
+            images, _ = data  # Assuming the DataLoader returns (images, labels)
             images = images.to(device)
 
             # Pass the images through the encoder

@@ -15,19 +15,23 @@ def train(
         model: nn.Module,
         device: torch.device,
         loss_fn,
-        optimizer
+        optimizer,
+        isSaveFeature
 ):
     torch.cuda.empty_cache()
     gc.collect()
     model.train()
     model = model.to(device)
     train_loss = 0
+    idx = 0
+    final_idx = len(train_loader) - 1
+
     for image in tqdm(train_loader, desc="Batches iterations"):
         image = image.to(device)
 
-        output = model(image)
+        output, encoder_output = model(image, True if idx == final_idx else False)
 
-        loss = loss_fn(output, image)
+        loss = loss_fn(output, image, encoder_output)
         train_loss += loss
 
         optimizer.zero_grad()
@@ -36,6 +40,8 @@ def train(
 
         torch.cuda.empty_cache()
         gc.collect()
+
+        idx += 1
 
     return train_loss / len(train_loader)
 
@@ -55,30 +61,30 @@ def validation(
     recon_error = []
 
     with torch.inference_mode():
-        for image, mask, label in tqdm(test_loader, desc="[Test] Batches iterations"):
+        for image, mask in tqdm(test_loader, desc="[Test] Batches iterations"):
             image = image.to(device)
 
-            output = model(image)
+            x_before, x_after = model(image)
 
-            loss = loss_fn(output, image)
+            loss = loss_fn(x_before, image)
             test_loss += loss
 
             torch.cuda.empty_cache()
             gc.collect()
 
-            predicted_mask = ((image - output) ** 2).mean(axis=1)[:, 0: -10, 0:-10]
+            predicted_mask = ((image - x_before) ** 2).mean(axis=1)[:, 0: -10, 0:-10]
 
             recon_error.append(predicted_mask.mean(axis=(1, 2)))
 
-    recon_error = torch.cat(recon_error).detach().cpu().numpy()
-
-    best_threshold = np.mean(recon_error) + 3 * np.std(recon_error)
-
+    # recon_error = torch.cat(recon_error).detach().cpu().numpy()
+    #
+    # best_threshold = np.mean(recon_error) + 3 * np.std(recon_error)
+    #
     total_sample = len(test_loader)
 
     return {
         "Test loss": test_loss / total_sample,
-        "Best threshold": best_threshold
+        # "Best threshold": best_threshold
         # # "Instance auroc": auroc / total_sample,
         # "Pixel-wise auroc": pixel_wise_auroc / total_sample
     }

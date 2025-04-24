@@ -4,7 +4,7 @@ import torch
 
 
 params: Dict[str, float | int | str] = {
-    "batch_size": 8,
+    "batch_size": 4,
     "train_mean": f"{TRAIN_MEAN}",
     "train_std": f"{TRAIN_STD}",
     "test_mean": f"{TEST_MEAN}",
@@ -12,7 +12,7 @@ params: Dict[str, float | int | str] = {
     "seed": 111,
     "device": torch.cuda.get_device_name(torch.cuda.current_device()),
     "learning_rate": 0.0002,
-    "num_epochs": 40,
+    "num_epochs": 20,
     "loss_function": "MSE + Structural Similarity Index Loss(SSIM)",
 
 }

@@ -7,6 +7,26 @@ from skimage.metrics import structural_similarity as ssim
 import numpy as np
 
 
+def contrastive_loss(features, temperature=0.07):
+    batch_size, h, w, channels = features.shape  # (batch, 14, 14, 384)
+
+    # Reshape from (batch, 14, 14, 384) → (batch, 196, 384) to treat spatial features separately
+    features = features.view(batch_size, h * w, channels)
+
+    # Normalize feature vectors for contrastive comparison
+    features = F.normalize(features, dim=-1)
+
+    # Compute similarity matrix across all spatial positions
+    similarity_matrix = torch.matmul(features, features.transpose(1, 2))  # (batch, 196, 196)
+
+    # Contrastive objective: maximize similarity for positive pairs
+    exp_sim = torch.exp(similarity_matrix / temperature)
+    pos_sim = torch.diagonal(exp_sim, dim1=-2, dim2=-1)  # Extract diagonal for positive pairs
+
+    loss = -torch.log(pos_sim / exp_sim.sum(dim=-1))
+    return loss.mean()
+
+
 class SSIMLoss(nn.Module):
     def __init__(self, data_range: float = 1.0, block_size: int = 8):
         super().__init__()
@@ -52,7 +72,7 @@ class ReconstructionLoss(nn.Module):
 
         self.entropy_loss = nn.BCELoss()
 
-    def forward(self, inputs, targets):
+    def forward(self, inputs, targets, encoder_output = None):
         # Compute MSE loss
         mse_loss = self.mse_loss(inputs, targets)
 
@@ -60,7 +80,12 @@ class ReconstructionLoss(nn.Module):
         ssim_loss = self.ssim(inputs, targets)
 
         # Combine MSE and SSIM loss
-        reconstruction_loss = mse_loss + self.lambda_value * ssim_loss
+        if isinstance(encoder_output, torch.Tensor):
+            reconstruction_loss = mse_loss + self.lambda_value * ssim_loss + contrastive_loss(
+                encoder_output, temperature=0.7
+            )
+        else:
+            reconstruction_loss = mse_loss + self.lambda_value * ssim_loss
 
 
         # Final combined loss
@@ -71,7 +96,7 @@ class ReconstructionLoss(nn.Module):
 
 def main():
     # Assuming 'recon_x' is the reconstructed output and 'x' is the target input
-    loss_fn = ReconstructionLoss(alpha=1.0, beta=0.5)
+    loss_fn = ReconstructionLoss(alpha=0.5, beta=0.5)
     recon_x = torch.randn(1, 3, 224, 224)  # Example reconstructed image
     x = torch.randn(1, 3, 224, 224)  # Example target image
 

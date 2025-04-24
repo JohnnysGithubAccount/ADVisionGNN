@@ -100,13 +100,17 @@ def main():
             "Loss": 0,
             "Instance AUROC": 0,
             "Full pixel AUROC": 0,
-            "Anomaly pixel AUROC": 0
+            "Anomaly pixel AUROC": 0,
+            "AUPRO": 0,
         }
 
-        for class_name in class_folders[:]:
+        for class_name in class_folders[0]:
+            print(len(class_folders))
             with mlflow.start_run(experiment_id=experiment_id, nested=True, run_name=class_name) as inner_run:
                 print(f"Implement the model")
-                gvae = GraphVariationalAutoencoder()
+                gvae = GraphVariationalAutoencoder(
+                    memory_bank_path="model/results/memory_bank.index"
+                )
 
                 model_architecture_path = "model/model_architecture.txt"
                 with open(model_architecture_path, "w") as file:
@@ -177,23 +181,28 @@ def main():
                     "Test loss": []
                 }
 
-                for epoch in tqdm(range(params["num_epochs"])):
+                last_epoch = list(range(params["num_epochs"]))[-1]
+                print("last_epoch:", last_epoch)
+                for epoch in range(params["num_epochs"]):
                     torch.cuda.empty_cache()
                     gc.collect()
 
                     print(f"Epoch: {epoch}")
+                    gvae.mode = "train"
                     train_loss = train(
                         train_loader=train_loader,
                         model=gvae,
                         device=device,
                         loss_fn=loss_function,
-                        optimizer=optimizer
+                        optimizer=optimizer,
+                        isSaveFeature=True
                     )
                     print(f"Train loss: {train_loss}")
 
                     torch.cuda.empty_cache()
                     gc.collect()
 
+                    gvae.mode = "test"
                     test_loss = validation(
                         test_loader=test_loader,
                         model=gvae,
@@ -213,7 +222,7 @@ def main():
                     mlflow.log_metric("Train loss", train_loss, step=epoch)
                     mlflow.log_metric("Test loss", test_loss["Test loss"], step=epoch)
                     # mlflow.log_metric("Instance AUROC", test_loss["Instance auroc"], step=epoch)
-                    mlflow.log_metric("Best threshold", test_loss["Best threshold"], step=epoch)
+                    # mlflow.log_metric("Best threshold", test_loss["Best threshold"], step=epoch)
 
                     torch.cuda.empty_cache()
                     gc.collect()
@@ -222,7 +231,8 @@ def main():
                         data_loader=test_loader,
                         model=gvae,
                         device=device,
-                        best_threshold=test_loss["Best threshold"]
+                        # best_threshold=test_loss["Best threshold"]
+                        best_threshold=.5
                     )
                     mlflow.log_figure(
                         figure=figure,
@@ -243,6 +253,7 @@ def main():
 
                     # create discriminator's model signature
                     inputs = torch.randn(1, 3, 224, 224)
+                    gvae.mode = "train"
                     model_signature = get_signature(
                         inputs=inputs,
                         device=device,

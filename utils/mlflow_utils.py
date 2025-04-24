@@ -52,7 +52,7 @@ def get_signature(
 
     model_signature = infer_signature(
         inputs.cpu().detach().numpy(),
-        outputs.cpu().detach().numpy()
+        outputs[0].cpu().detach().numpy()
     )  # get the model signature
 
     return model_signature

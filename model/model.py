@@ -5,15 +5,18 @@ import torch
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
+from PIL import Image
+from matplotlib import pyplot as plt
 from torch.nn import Sequential as Seq
 from typing import List, Tuple, Dict
 from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from timm.models.helpers import load_pretrained
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 from timm.models.registry import register_model
+from torchvision import transforms
 
 from GVAE.ADVisionGNN.gcn_lib import Grapher, act_layer
-from patchcore.utils import save_to_faiss, subsampling
+from GVAE.ADVisionGNN.model.patchcore.utils import save_to_faiss, subsampling, corset_subsampling
 
 
 class FFN(nn.Module):
@@ -270,7 +273,7 @@ class GraphVariationalAutoencoder(nn.Module):
     def __init__(self,
                  decoder:str = 'cnn',
                  mode: str = "train",
-                 memory_bank_path: str = "../model/results/model/memory_bank.index"):
+                 memory_bank_path: str = "../model/results/model/memory_bank.index",):
         """
 
         :param decoder: cnn or graph
@@ -278,7 +281,9 @@ class GraphVariationalAutoencoder(nn.Module):
         """
         super(GraphVariationalAutoencoder, self).__init__()
 
+        self.memory_bank_path = memory_bank_path
         self.memory_bank = list()
+        self.mode = mode
 
         blocks = [2, 2, 6, 2]
         blocks = [2, 4, 2]
@@ -331,8 +336,12 @@ class GraphVariationalAutoencoder(nn.Module):
         def hook(module, inputs, outputs):
             self.features.append(outputs)
 
-        self.model.encoder.block[4][1].fc2[1].register_forward_hook(hook)
-        self.model.encoder.block[7][1].fc2[1].register_forward_hook(hook)
+        self.encoder.blocks[4][1].fc2[1].register_forward_hook(hook)
+        self.encoder.blocks[7][1].fc2[1].register_forward_hook(hook)
+
+        self.avg = torch.nn.AvgPool2d(3, stride=1)
+
+        self.y_score= list()
 
     def model_init(self):
         for m in self.modules():
@@ -350,104 +359,137 @@ class GraphVariationalAutoencoder(nn.Module):
             self.memory_bank_path
         )
 
-    def forward(self, inputs):
-        x = self.stem(inputs) + self.pos_embed
-        B, C, H, W = x.shape
+    def forward(self, inputs, is_saved: bool = False):
+        segm_map = None
+        embedding_layer = self.stem(inputs) + self.pos_embed
+        B, C, H, W = embedding_layer.shape
 
-        x = self.encoder(x)
-        x = self.decoder(x)
+        encoder_output = self.encoder(embedding_layer)
 
-        
+        self.features = []
+        with torch.no_grad():
+            _ = self.encoder(embedding_layer)
+        fmap_size = self.features[0].shape[-2]
+        self.resize = torch.nn.AdaptiveAvgPool2d(fmap_size)
+        resized_maps = [self.resize(self.avg(fmap)) for fmap in self.features]
+        patch = torch.cat(resized_maps, 1)  # Merge the resized feature maps
+        patch = patch.reshape(patch.shape[1], -1).T  # Create a column tensor
 
-        return x
+        if self.mode == "train" and is_saved:
+            print("Saving")
+            # sub_patch = subsampling(patch)
+            sub_patch = corset_subsampling(patch)
+            print(sub_patch.shape)
+            save_to_faiss(sub_patch, path=self.memory_bank_path)
+        elif self.mode == "test":
+            memory_bank = load_faiss_to_tensor(self.memory_bank_path).cuda()
+            print("Test:", patch.shape, memory_bank.shape)
+            distances = torch.cdist(
+                patch,
+                memory_bank
+            )
+            print(distances.shape)
+            dist_score, dist_score_idxs = torch.min(distances, dim=1)
+            s_star = torch.max(dist_score)
+            segm_map = dist_score.view(B, 1, 28, 28)
+            segm_map = F.interpolate(segm_map, size=(224, 224), mode='bilinear', align_corners=False)
+
+        x_reconstruct = self.decoder(encoder_output)
+        if self.mode == 'test' and segm_map is not None:
+            # x_after = x_before + segm_map.cuda()
+            # print("Final:", x_before.shape)
+            return x_reconstruct, segm_map
+        return x_reconstruct, encoder_output
+
+def test_saving_feature():
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # Initialize the model
+    model = GraphVariationalAutoencoder(decoder='cnn', mode='train').to(device)
+
+    # Create dummy input data (e.g., a batch of 8 images with 3 channels, 224x224)
+    dummy_input = torch.randn(32, 3, 224, 224).to(device)
+
+    # Set the model to training mode
+    model.train()
+
+    # Call the forward method with is_saved set to True
+    output = model(dummy_input, is_saved=True)
+
+    # Verify output shape
+    print("Output shape:", output.shape)
+
+    # Check if memory bank is filled and saved correctly
+    if model.features:
+        print("Memory bank is filled.")
+    else:
+        print("Memory bank is empty.")
 
 
-class PatchExtractor(torch.nn.Module):
-    def __init__(self):
-        super(PatchExtractor, self).__init__()
+def load_faiss_to_tensor(index_path):
+    # Load the FAISS index
+    print("got here")
+    index = faiss.read_index(index_path)
 
-    def forward(self, feature_maps):
-        # Validate the shape of the input feature maps
-        if feature_maps.shape != (1, 240, 14, 14):
-            raise ValueError("Input feature maps must have shape (1, 240, 14, 14)")
+    if index is not None:
+        # Get the number of vectors in the index
+        num_vectors = index.ntotal
+        feature_dim = index.d  # Dimension of the feature vectors
 
-        # Create patches of shape (240, 3, 3)
-        patches = []
-        for i in range(0, 14 - 3 + 1):  # Iterate over rows
-            for j in range(0, 14 - 3 + 1):  # Iterate over columns
-                patch = feature_maps[:, :, i:i + 3, j:j + 3]  # Keep batch dimension
-                patches.append(patch)
+        # Create a tensor to hold the vectors
+        vectors = torch.empty((num_vectors, feature_dim), dtype=torch.float32)
+        # Retrieve all vectors
+        for i in range(num_vectors):
+            vectors[i] = torch.from_numpy(index.reconstruct(i))
+        print(vectors.shape)
+        return vectors
 
-        # Convert patches to a tensor
-        patches = torch.stack(patches)  # Shape will be (number of patches, 1, 240, 3, 3)
+def load_image(image_path):
+    # Define the transformations
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+    ])
 
-        # Reshape for FAISS, we need to flatten the patches
-        num_patches = patches.shape[0]
-        patches_flat = patches.view(num_patches, 240 * 3 * 3)  # Shape will be (num_patches, 240 * 3 * 3)
+    # Load the image
+    image = Image.open(image_path).convert('RGB')
+    image = transform(image)
 
-        # Initialize a FAISS index
-        d = 240 * 3 * 3  # Dimension of each patch
-        index = faiss.IndexFlatL2(d)  # Using L2 distance
+    # Add batch dimension
+    image = image.unsqueeze(0)  # Shape: (1, C, H, W)
+    return image.cuda()
 
-        # Add patches to the FAISS index
-        index.add(patches_flat.detach().numpy().astype(float))
 
-        # Save the FAISS index to disk
-        faiss.write_index(index, 'feature_patches.index')
+# Function to test the model and plot the segm_map
+def test_and_plot_segmentation(model, image_path):
+    # Load and preprocess the image
+    image = load_image(image_path)
 
-        print("Patches saved to FAISS index successfully.")
+    # Set the model to evaluation mode
+    model.eval()
+
+    with torch.no_grad():
+        # Pass the image through the model
+        segm_map = model(image.cuda(), is_saved=False)
+
+    # Plot the segmentation map
+    plt.figure(figsize=(8, 8))
+    plt.imshow(segm_map[0].cpu().numpy().transpose(1, 2, 0))  # Convert to HWC format
+    plt.title('Segmentation Map')
+    plt.axis('off')
+    plt.show()
 
 
 def main():
-    n_blocks = sum([2, 2, 6, 2])
-    channels = [48, 96, 240, 384]
-    act = 'relu'
+    # Example usage
+    # Load your trained model
+    model = GraphVariationalAutoencoder(mode="test", memory_bank_path="../model/results/model/memory_bank.index").cuda()
+    # Load the model weights if you have them saved
+    # model.load_state_dict(torch.load('path_to_model_weights.pth'))
 
-    stem = Stem(out_dim=channels[0], act=act)
-
-    encoder = GraphEncoder(
-        num_block=[2, 2, 2],
-        hidden_channels=[48, 96, 240],
-        reduce_ratios=[4, 2, 1],
-        dpr = [x.item() for x in torch.linspace(0, 0.0, n_blocks)]
-    )
-
-    # Create dummy feature maps
-    # feature_maps = torch.rand(240, 14, 14).float()
-    extractor = PatchExtractor()
-
-    device = torch.device('cpu')
-    print(f"Using: {device}")
-
-    inputs = torch.randn(1, 3, 224, 224).to(device)
-    print(inputs.shape)
-
-    stem = stem.to(device)
-    encoder = encoder.to(device)
-    extractor.to(device)
-
-    # forward
-    stem_output = stem(inputs)
-    encoder_output = encoder(stem_output)
-    print(encoder_output.shape)
-    # extractor(encoder_output)
-    index = faiss.read_index('feature_patches.index')
-    # Check the type of index
-    print("Index type:", type(index))
-
-    # Check the dimension of the index
-    print("Dimension of the index:", index.d)
-
-    # Number of vectors stored in the index
-    print("Number of vectors in the index:", index.ntotal)
-
-    # Example of performing a search
-    # For demonstration, create a random query vector
-    query_vector = np.random.rand(1, index.d).astype(np.float32)
-    distances, indices = index.search(query_vector, k=5)  # Find the 5 nearest neighbors
-    print("Distances to nearest neighbors:", distances)
-    print("Indices of nearest neighbors:", indices)
-
+    # Test the model with an image
+    image_path = (r'D:\UsingSpace\HCMUTE\Pratical Machine Learning and Artificial Intelligence'
+                  '\patchcore-inspection-main\patchcore-inspection-main\mvtec\carpet\\test\color\\001.png')  # Replace with your image path
+    test_and_plot_segmentation(model, image_path)
 
 
 if __name__ == "__main__":
