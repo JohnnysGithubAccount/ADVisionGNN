@@ -104,12 +104,13 @@ def main():
             "AUPRO": 0,
         }
 
-        for class_name in class_folders[0]:
+        for class_name in class_folders:
             print(len(class_folders))
             with mlflow.start_run(experiment_id=experiment_id, nested=True, run_name=class_name) as inner_run:
                 print(f"Implement the model")
                 gvae = GraphVariationalAutoencoder(
-                    memory_bank_path="model/results/memory_bank.index"
+                    sub_type="corset",
+                    memory_bank_path=f"model/results/{class_name}/memory_bank.index"
                 )
 
                 model_architecture_path = "model/model_architecture.txt"
@@ -156,8 +157,8 @@ def main():
                 print(f"[INFO] Setting Loss and Optimizers")
                 loss_function = ReconstructionLoss(
                     alpha=1.0,
-                    beta=1.0,
-                    lambda_value=0.2
+                    beta=0.25,
+                    lambda_value=0.1
                 ).to(device=device)
 
                 # create and tracking optimizer for discriminator
@@ -189,38 +190,37 @@ def main():
 
                     print(f"Epoch: {epoch}")
                     gvae.mode = "train"
-                    train_loss = train(
+                    training_metrics = train(
                         train_loader=train_loader,
                         model=gvae,
                         device=device,
                         loss_fn=loss_function,
                         optimizer=optimizer,
-                        isSaveFeature=True
                     )
-                    print(f"Train loss: {train_loss}")
+                    print(f"Train loss: {training_metrics['loss']}")
 
                     torch.cuda.empty_cache()
                     gc.collect()
 
                     gvae.mode = "test"
-                    test_loss = validation(
+                    testing_metrics = validation(
                         test_loader=test_loader,
                         model=gvae,
                         device=device,
                         loss_fn=loss_function
                     )
-                    print(f"Test loss: {test_loss}")
+                    print(f"Test loss: {testing_metrics['loss']}")
 
-                    scheduler.step(test_loss["Test loss"])
+                    scheduler.step(testing_metrics["loss"])
                     current_lr = optimizer.param_groups[0]['lr']
                     mlflow.log_metric("learning_rate", current_lr, step=epoch)
 
-                    history["Train loss"].append(train_loss.item())
-                    history["Test loss"].append(test_loss["Test loss"].item())
+                    history["Train loss"].append(training_metrics['loss'].item())
+                    history["Test loss"].append(testing_metrics["loss"].item())
 
                     # log the losses in each epoch
-                    mlflow.log_metric("Train loss", train_loss, step=epoch)
-                    mlflow.log_metric("Test loss", test_loss["Test loss"], step=epoch)
+                    mlflow.log_metric("Train loss", training_metrics['loss'], step=epoch)
+                    mlflow.log_metric("Test loss", testing_metrics["loss"], step=epoch)
                     # mlflow.log_metric("Instance AUROC", test_loss["Instance auroc"], step=epoch)
                     # mlflow.log_metric("Best threshold", test_loss["Best threshold"], step=epoch)
 

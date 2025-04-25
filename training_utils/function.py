@@ -72,7 +72,7 @@ class ReconstructionLoss(nn.Module):
 
         self.entropy_loss = nn.BCELoss()
 
-    def forward(self, inputs, targets, encoder_output = None):
+    def forward(self, inputs, targets, s_star, encoder_output = None):
         # Compute MSE loss
         mse_loss = self.mse_loss(inputs, targets)
 
@@ -82,14 +82,14 @@ class ReconstructionLoss(nn.Module):
         # Combine MSE and SSIM loss
         if isinstance(encoder_output, torch.Tensor):
             reconstruction_loss = mse_loss + self.lambda_value * ssim_loss + contrastive_loss(
-                encoder_output, temperature=0.7
+                encoder_output, temperature=0.07
             )
         else:
             reconstruction_loss = mse_loss + self.lambda_value * ssim_loss
 
 
         # Final combined loss
-        total_loss = self.alpha * reconstruction_loss
+        total_loss = self.alpha * reconstruction_loss + self.beta * torch.log(s_star + 1e-8)
 
         return total_loss
 

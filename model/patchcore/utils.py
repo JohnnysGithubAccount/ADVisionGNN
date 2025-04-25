@@ -15,6 +15,23 @@ from torch import optim
 import faiss
 
 
+def load_faiss_to_tensor(index_path):
+    # Load the FAISS index
+    index = faiss.read_index(index_path)
+
+    if index is not None:
+        # Get the number of vectors in the index
+        num_vectors = index.ntotal
+        feature_dim = index.d  # Dimension of the feature vectors
+
+        # Create a tensor to hold the vectors
+        vectors = torch.empty((num_vectors, feature_dim), dtype=torch.float32)
+        # Retrieve all vectors
+        for i in range(num_vectors):
+            vectors[i] = torch.from_numpy(index.reconstruct(i))
+        return vectors
+
+
 def save_to_faiss(features, path: str):    # Ensure features are in float32 format
     features = features.astype('float32')
 
@@ -34,7 +51,7 @@ def save_to_faiss(features, path: str):    # Ensure features are in float32 form
     print(f"Features saved in FAISS database at '{path}'.")
 
 
-def subsampling(memory_list, percent: int = 50):
+def subsampling(memory_list, percent: int = 2):
     """
 
     :param memory_list:
@@ -51,7 +68,7 @@ def subsampling(memory_list, percent: int = 50):
     return memory_list[selected_indicies]
 
 
-def corset_subsampling(memory_list, percent: int = 50):
+def corset_subsampling(memory_list, percent: int = 2):
     """
     Perform corset subsampling on the input data.
     :param memory_list: numpy array representing the data.

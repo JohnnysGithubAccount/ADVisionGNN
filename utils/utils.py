@@ -46,7 +46,7 @@ def get_image(data_loader, model, device, best_threshold, figure_size: Tuple[int
         image = image.to(device)
         model = model.to(device)
 
-        reconstructed_image, features_based = model(image)
+        reconstructed_image, features_based, s_star = model(image)
         min_val = features_based.min()
         max_val = features_based.max()
         features_based = (features_based - min_val) / (max_val - min_val) * 2 - 1
